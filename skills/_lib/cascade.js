@@ -197,7 +197,7 @@ export async function runCascade(opts) {
       const v = await verifyNode(item, commands, token);
       row.verify = v.ok ? "✓" : `✗ ${v.detail || ""}`;
     } catch (err) {
-      row.verify = `✗ ${err.message}`;
+      row.verify = `✗ ${err.response?.data?.message || err.message}`;
     }
   }
 
