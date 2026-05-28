@@ -348,4 +348,4 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "
   main().catch(err => { console.error("Fatal error:", err); process.exit(1); });
 }
 
-export { renameColumn };
+export { renameColumn, main };
