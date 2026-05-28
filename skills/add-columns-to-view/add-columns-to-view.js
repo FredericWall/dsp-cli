@@ -326,4 +326,4 @@ if (import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, "/"))) {
   });
 }
 
-export { addColumnsToView, parseColumns };
+export { addColumnsToView, parseColumns, main };
