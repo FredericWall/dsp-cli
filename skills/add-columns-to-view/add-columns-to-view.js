@@ -36,6 +36,7 @@ function parseArgs(args) {
     columns: null,
     insertBefore: null,
     noDeploy: false,
+    allowMissingDependencies: false,
   };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--name" && args[i + 1])           { params.name = args[++i]; }
@@ -43,6 +44,7 @@ function parseArgs(args) {
     else if (args[i] === "--columns" && args[i + 1])   { params.columns = args[++i]; }
     else if (args[i] === "--insert-before" && args[i + 1]) { params.insertBefore = args[++i]; }
     else if (args[i] === "--no-deploy")                { params.noDeploy = true; }
+    else if (args[i] === "--allow-missing-dependencies") { params.allowMissingDependencies = true; }
   }
   return params;
 }
@@ -97,7 +99,7 @@ async function readView(commands, space, name) {
   return JSON.parse(raw.slice(jsonStart));
 }
 
-async function saveView(commands, space, name, payload, noDeploy) {
+async function saveView(commands, space, name, payload, noDeploy, allowMissingDependencies) {
   const tmpFile = path.join(os.tmpdir(), `dsp_addcols_${name}.json`);
   await fs.writeFile(tmpFile, JSON.stringify(payload, null, 2), "utf8");
   const opts = {
@@ -106,6 +108,7 @@ async function saveView(commands, space, name, payload, noDeploy) {
     "--file-path": tmpFile,
   };
   if (noDeploy) opts["--no-deploy"] = true;
+  if (allowMissingDependencies) opts["--allow-missing-dependencies"] = true;
   const raw = await captureStdout(() => commands["objects views update"](opts));
   const jsonStart = raw.indexOf("{");
   return jsonStart >= 0 ? JSON.parse(raw.slice(jsonStart)) : { message: raw.trim() };
@@ -290,7 +293,7 @@ async function addColumnsToView(params) {
 
   // Save
   console.log(`\nSaving ${params.name}...`);
-  const resp = await saveView(commands, params.space, params.name, view, params.noDeploy);
+  const resp = await saveView(commands, params.space, params.name, view, params.noDeploy, params.allowMissingDependencies);
   console.log(`✅ ${resp.message || JSON.stringify(resp)}`);
   if (params.noDeploy) {
     console.log("   (saved but not deployed — deploy manually in DSP UI)");
@@ -312,7 +315,7 @@ async function main() {
   const params = parseArgs(args);
 
   if (!params.name || !params.columns) {
-    console.error("Usage: node add-columns-to-view.js --name <view-name> --columns \"COL1:type:len:Label;COL2:type:len:Label\" [--space <space>] [--insert-before <col>] [--no-deploy]");
+    console.error("Usage: node add-columns-to-view.js --name <view-name> --columns \"COL1:type:len:Label;COL2:type:len:Label\" [--space <space>] [--insert-before <col>] [--no-deploy] [--allow-missing-dependencies]");
     process.exit(1);
   }
 

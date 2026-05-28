@@ -56,6 +56,7 @@ async function main() {
         "--space", params.space,
         "--columns", params.columns,
         "--no-deploy",
+        "--allow-missing-dependencies",
       ];
       const origArgv = process.argv;
       process.argv = argv;
