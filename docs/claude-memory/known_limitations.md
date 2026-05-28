@@ -12,9 +12,6 @@ There is no skill to delete objects from Datasphere. A `delete-object` skill was
 ### No deploy/undeploy skill
 The mutation skills (`rename-column`, `remove-column`) save with `--no-deploy`. There is no skill to trigger deployment programmatically. Deploy manually from the DSP UI after making changes.
 
-### No bulk operations
-Each skill operates on one object at a time. There is no batch mode for creating, updating, or deleting multiple objects in a single call. The `create-model` skill orchestrates multiple creations sequentially but is not a true bulk API.
-
 ---
 
 ## API and Connectivity
@@ -71,6 +68,9 @@ If `uiModel` is not updated when `definitions` and `query` change, DSP converts 
 ### No view type conversion
 There is no skill to convert a SQL view to a Graphical view or vice versa.
 
+### SQL views: cascade skills warn and skip
+The cascade skills (`propagate-columns`, `rename-column-cascade`, `remove-column-cascade`) detect SQL views in the chain and skip them with a warning. SQL view edits remain manual via the DSP UI.
+
 ---
 
 ## Object Creation
@@ -93,11 +93,13 @@ For balance, here's what is reliable and well-tested:
 - **Creating complete data models** (dimensions -> fact -> view -> AM) using `create-model` or individual skills
 - **Listing and reading objects** across all 6 object types
 - **Impact analysis** with caching on spaces with 800+ objects
-- **Column cascading** (rename/remove) across view -> AM dependencies
-- **Adding columns to graphical views** idempotently
+- **Single-hop column cascading** (rename/remove) across view -> AM dependencies
+- **Multi-hop chain cascading** (add/rename/remove) via `propagate-columns`, `rename-column-cascade`, `remove-column-cascade`
+- **Adding columns to graphical views** idempotently (single view) or whole chains (`propagate-columns`)
+- **Adding columns to local tables** (`add-columns-to-table`)
 - **Dependency detection** for graphical views (simple refs, JOINs, associations)
 - **Dependency detection** for SQL views (quoted FROM/JOIN patterns)
 
 ---
 
-*Last updated: 2026-04-17*
+*Last updated: 2026-05-28*

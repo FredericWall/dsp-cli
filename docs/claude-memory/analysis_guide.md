@@ -216,6 +216,63 @@ This exports the full CSN definitions of the model and all its dependencies to l
 
 ---
 
+## Step 7: Cascade modifications across a chain
+
+For multi-level changes that affect a whole chain (table → view → view → AM), use the cascade skills instead of running single-node skills repeatedly.
+
+### Add columns across a chain
+
+```bash
+# 1. Add columns to the source table
+node --env-file=.env skills/add-columns-to-table/add-columns-to-table.js \
+  --name MY_TABLE \
+  --columns "NEW_COL:cds.String:10:New Col"
+
+# 2. Propagate to all downstream views
+node --env-file=.env skills/propagate-columns/propagate-columns.js \
+  --start MY_TABLE \
+  --columns "NEW_COL:cds.String:10:New Col" \
+  --cache
+```
+
+The cascade skill builds the dependency graph (or reuses cached one), backs up every affected object, calls `add-columns-to-view` per node in topo order, verifies each, then deploys.
+
+### Rename a column across a chain
+
+```bash
+node --env-file=.env skills/rename-column-cascade/rename-column-cascade.js \
+  --start MY_VIEW \
+  --old-name OLD_COL \
+  --new-name NEW_COL \
+  --cache
+```
+
+### Remove a column across a chain
+
+```bash
+node --env-file=.env skills/remove-column-cascade/remove-column-cascade.js \
+  --start MY_VIEW \
+  --column UNWANTED_COL \
+  --cache
+```
+
+### Cascade flags
+
+- `--dry-run` prints the plan without writing — always run this first on big chains
+- `--cache` reuses the impact-analysis graph cache (much faster on repeat)
+- `--force` overrides the 50-node guard
+- `--no-deploy` saves but skips the deploy phase
+
+### Backup location
+
+Every cascade run writes a backup to `.cache/backups/<timestamp>-<action>/`. The path is printed at the start.
+
+### SQL views in the chain
+
+Cascade skills cannot edit SQL views or table-function views. If a SQL view appears in the chain, the skill prints a warning and skips it. Edit such views manually in the DSP UI.
+
+---
+
 ## Recommended Workflow for Large Changes
 
 1. **Explore**: `list-objects` to survey the space

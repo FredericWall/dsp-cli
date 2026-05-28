@@ -24,6 +24,11 @@ skills/
   impact-analysis/          # Full recursive dependency graph + column gap analysis (single scan, cached)
 
   # ── Modify objects ──────────────────────────────────────────
+  add-columns-to-view/      # Add columns to existing graphical views
+  add-columns-to-table/     # Add columns to existing local tables
+  propagate-columns/        # Cascade-add columns across multi-level view chains
+  rename-column-cascade/    # Cascade-rename across multi-level view chains
+  remove-column-cascade/    # Cascade-remove across multi-level view chains
   rename-column/            # Rename a column in a view + cascade to analytic models
   remove-column/            # Remove a column from a view + cascade to analytic models
 
