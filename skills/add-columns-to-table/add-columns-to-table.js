@@ -50,7 +50,7 @@ function parseObject(raw) {
 
 async function readTable(commands, space, name) {
   const raw = await captureStdout(() =>
-    commands["objects local-tables read"]({ "--space": space, "--technical-name": name })
+    commands["objects local-tables read"]({ "--host": HOST, "--space": space, "--technical-name": name })
   );
   return parseObject(raw);
 }
@@ -59,6 +59,7 @@ async function saveTable(commands, space, name, payload, noDeploy) {
   const tmpFile = path.join(os.tmpdir(), `dsp_addcoltbl_${name}.json`);
   await fs.writeFile(tmpFile, JSON.stringify(payload, null, 2), "utf8");
   const opts = {
+    "--host": HOST,
     "--space": space,
     "--technical-name": name,
     "--file-path": tmpFile,
@@ -86,14 +87,25 @@ async function main() {
     "--authorization-flow": "authorization_code",
     "--force": true,
   });
+  try { await commands["config cache init"]({ "--host": HOST }); } catch { /* non-blocking */ }
+  const freshCommands = await getCommands(HOST);
 
   console.log(`Reading table ${params.name}...`);
-  const csn = await readTable(commands, params.space, params.name);
+  const csn = await readTable(freshCommands, params.space, params.name);
   const defKey = Object.keys(csn.definitions || {}).find(k => k === params.name) || Object.keys(csn.definitions || {})[0];
   if (!defKey) { console.error("Table has no definition."); process.exit(1); }
   const def = csn.definitions[defKey];
   def.elements ||= {};
-  def.query ||= { SELECT: { from: { ref: [defKey] }, columns: [] } };
+  // If the table has no query block, synthesize one that includes ALL existing elements
+  // so we don't drop columns that were already there.
+  if (!def.query) {
+    def.query = {
+      SELECT: {
+        from: { ref: [defKey] },
+        columns: Object.keys(def.elements).map(name => ({ ref: [name] })),
+      },
+    };
+  }
   def.query.SELECT.columns ||= [];
 
   let added = 0, skipped = 0;
@@ -116,7 +128,7 @@ async function main() {
 
   console.log(`\nSaving table with ${added} new column(s)...`);
   try {
-    await saveTable(commands, params.space, params.name, csn, params.noDeploy);
+    await saveTable(freshCommands, params.space, params.name, csn, params.noDeploy);
     console.log(`✓ Table ${params.name} updated.`);
     if (params.noDeploy) console.log("  (saved but not deployed — deploy manually in DSP UI)");
   } catch (err) {

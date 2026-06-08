@@ -5,7 +5,7 @@
  * Warns on SQL views.
  */
 
-import { runCascade } from "../_lib/cascade.js";
+import { runCascade, deployObject } from "../_lib/cascade.js";
 import { parseColumnsFlag } from "../_lib/csn.js";
 import { readObject } from "../_lib/graph.js";
 
@@ -77,14 +77,9 @@ async function main() {
       const missing = cols.filter(c => !elements[c.name]);
       return { ok: missing.length === 0, detail: missing.length > 0 ? `missing ${missing.map(c => c.name).join(",")}` : "" };
     },
-    deployNode: async (item, commands) => {
+    deployNode: async (item, commands, token, snapshotData) => {
       if (item.depth === 0 || item.node.type !== "view") return { ok: true };
-      try {
-        await commands["objects views deploy"]({ "--space": params.space, "--technical-name": item.name });
-        return { ok: true };
-      } catch (err) {
-        return { ok: false, error: err.response?.data?.message || err.message };
-      }
+      return deployObject(token, params.space, item.node.type, item.name, commands, snapshotData);
     },
   });
 

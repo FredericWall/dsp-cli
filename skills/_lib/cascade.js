@@ -8,8 +8,11 @@
  */
 
 import fs from "fs/promises";
+import os from "os";
 import path from "path";
+import { getCommands } from "@sap/datasphere-cli";
 import {
+  HOST,
   authenticate,
   buildGraph,
   loadCache,
@@ -48,16 +51,18 @@ export async function backupNodes(token, space, plan, action) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const dir = path.join(process.cwd(), ".cache", "backups", `${stamp}-${action}`);
   await fs.mkdir(dir, { recursive: true });
-  for (const item of plan) {
+  const snapshots = new Map(); // name → CSN data, reused later to avoid re-reads
+  await Promise.all(plan.map(async (item) => {
     const endpoint = item.node.type === "analyticModel" ? "analyticmodels"
       : item.node.type === "table" ? "localtables"
       : "views";
     const data = await readObject(token, space, endpoint, item.name);
     if (data) {
+      snapshots.set(item.name, data);
       await fs.writeFile(path.join(dir, `${item.name}.json`), JSON.stringify(data, null, 2));
     }
-  }
-  return dir;
+  }));
+  return { dir, snapshots };
 }
 
 /** Pretty-print the plan to stdout. */
@@ -86,6 +91,40 @@ export function buildPlan(graph, startName) {
 }
 
 /**
+ * Deploy an object by re-reading its current CSN and re-saving it without --no-deploy.
+ * The DSP CLI has no separate "deploy" sub-command — deploy is triggered by omitting
+ * --no-deploy on the update call.
+ *
+ * @param {string} token  Bearer token
+ * @param {string} space  Space ID
+ * @param {"view"|"analyticModel"} type  Object type
+ * @param {string} name   Technical name
+ * @param {object} commands  CLI commands object
+ * @returns {{ ok: boolean, error?: string }}
+ */
+export async function deployObject(token, space, type, name, commands, snapshotData) {
+  const endpoint = type === "analyticModel" ? "analyticmodels" : "views";
+  const cliCmd = type === "analyticModel" ? "objects analytic-models update" : "objects views update";
+  const data = snapshotData || await readObject(token, space, endpoint, name);
+  if (!data) return { ok: false, error: `could not read ${name} for deploy` };
+  const tmpFile = path.join(os.tmpdir(), `dsp_deploy_${name}.json`);
+  await fs.writeFile(tmpFile, JSON.stringify(data, null, 2), "utf8");
+  try {
+    await commands[cliCmd]({
+      "--host": HOST,
+      "--space": space,
+      "--technical-name": name,
+      "--file-path": tmpFile,
+      "--allow-missing-dependencies": true,
+      // --no-deploy intentionally omitted to trigger deploy
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.response?.data?.message || err.message };
+  }
+}
+
+/**
  * Run the full cascade lifecycle.
  *
  * Args:
@@ -97,7 +136,7 @@ export function buildPlan(graph, startName) {
  *                 Returns ok=true on save success; false on failure.
  *   verifyNode:   async (item, commands, token) => { ok, detail }
  *                 Called per save-success node to confirm the change.
- *   deployNode:   async (item, commands, token) => { ok, error? }
+ *   deployNode:   async (item, commands, token, snapshotData?) => { ok, error? }
  *                 Called per verified node when noDeploy=false.
  *   dryRun, noDeploy, force, cache, refresh, maxNodes
  */
@@ -160,38 +199,42 @@ export async function runCascade(opts) {
 
   // Backup
   console.log("\n  Backing up affected objects...");
-  const backupDir = await backupNodes(token, space, plan, action);
+  const { dir: backupDir, snapshots } = await backupNodes(token, space, plan, action);
   console.log(`  ✓ Backup: ${backupDir}`);
 
-  // Save phase
+  // Save phase — group by depth so items at the same depth run in parallel
   console.log("\n  Save phase:");
   const summary = [];
-  for (const item of plan) {
-    const cls = classifyEdge(item.edgeType);
-    const row = { name: item.name, type: item.node.type, edge: item.edgeType, depth: item.depth, save: "-", verify: "-", deploy: "-" };
-    if (cls === "skip") {
-      row.save = "skipped (assoc)";
+  const depths = [...new Set(plan.map(p => p.depth))].sort((a, b) => a - b);
+  for (const depth of depths) {
+    const group = plan.filter(p => p.depth === depth);
+    await Promise.all(group.map(async (item) => {
+      const cls = classifyEdge(item.edgeType);
+      const row = { name: item.name, type: item.node.type, edge: item.edgeType, depth: item.depth, save: "-", verify: "-", deploy: "-" };
+      if (cls === "skip") {
+        row.save = "skipped (assoc)";
+        summary.push(row);
+        return;
+      }
+      if (cls === "warn") {
+        row.save = "skipped (sql)";
+        summary.push(row);
+        return;
+      }
+      try {
+        const r = await processNode(item, commands, token);
+        row.save = r.ok ? "✓" : `✗ ${r.error || "fail"}`;
+      } catch (err) {
+        row.save = `✗ ${err.response?.data?.message || err.message}`;
+      }
       summary.push(row);
-      continue;
-    }
-    if (cls === "warn") {
-      row.save = "skipped (sql)";
-      summary.push(row);
-      continue;
-    }
-    try {
-      const r = await processNode(item, commands, token);
-      row.save = r.ok ? "✓" : `✗ ${r.error || "fail"}`;
-    } catch (err) {
-      row.save = `✗ ${err.response?.data?.message || err.message}`;
-    }
-    summary.push(row);
+    }));
   }
 
-  // Verify phase
+  // Verify phase — all independent reads, run in parallel
   console.log("\n  Verify phase:");
-  for (const row of summary) {
-    if (row.save !== "✓") continue;
+  await Promise.all(summary.map(async (row) => {
+    if (row.save !== "✓") return;
     const item = plan.find(p => p.name === row.name);
     try {
       const v = await verifyNode(item, commands, token);
@@ -199,22 +242,22 @@ export async function runCascade(opts) {
     } catch (err) {
       row.verify = `✗ ${err.response?.data?.message || err.message}`;
     }
-  }
+  }));
 
-  // Deploy phase
+  // Deploy phase — independent per object, run in parallel
   const allVerified = summary.every(r => r.save !== "✓" || r.verify === "✓");
   if (!noDeploy && allVerified) {
     console.log("\n  Deploy phase:");
-    for (const row of summary) {
-      if (row.verify !== "✓") continue;
+    await Promise.all(summary.map(async (row) => {
+      if (row.verify !== "✓") return;
       const item = plan.find(p => p.name === row.name);
       try {
-        const d = await deployNode(item, commands, token);
+        const d = await deployNode(item, commands, token, snapshots.get(item.name));
         row.deploy = d.ok ? "✓" : `✗ ${d.error || ""}`;
       } catch (err) {
         row.deploy = `✗ ${err.response?.data?.message || err.message}`;
       }
-    }
+    }));
   } else if (!allVerified) {
     console.log("\n  Skipping deploy phase (verification failures present).");
   } else {

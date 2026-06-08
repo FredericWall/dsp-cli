@@ -1,6 +1,8 @@
 # add-columns-to-table
 
-Add new columns to an existing local table in SAP Datasphere.
+Add new columns to an existing **local table** in SAP Datasphere.
+
+> **Object type check**: This skill only works on local tables. If the object is a view, use `add-columns-to-view` instead. If you're unsure of the type, check: a local table has `"kind":"entity"` and no `editorSettings.uiModel`; a view has `editorSettings.uiModel`.
 
 ## Description
 

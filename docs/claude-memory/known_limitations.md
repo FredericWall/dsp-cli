@@ -10,7 +10,9 @@ This document lists current limitations, unsupported features, and known issues.
 There is no skill to delete objects from Datasphere. A `delete-object` skill was planned but removed before completion. To delete objects, use the SAP Datasphere UI directly.
 
 ### No deploy/undeploy skill
-The mutation skills (`rename-column`, `remove-column`) save with `--no-deploy`. There is no skill to trigger deployment programmatically. Deploy manually from the DSP UI after making changes.
+~~The mutation skills save with `--no-deploy`. There is no skill to trigger deployment programmatically.~~
+
+**Resolved**: The cascade skills (`propagate-columns`, `rename-column-cascade`, `remove-column-cascade`) now deploy automatically after the verify phase by re-saving without `--no-deploy`. The single-node skills (`rename-column`, `remove-column`, `add-columns-to-view`, `add-columns-to-table`) still use `--no-deploy` by default — pass without the flag or deploy manually from the DSP UI.
 
 ---
 
@@ -94,7 +96,7 @@ For balance, here's what is reliable and well-tested:
 - **Listing and reading objects** across all 6 object types
 - **Impact analysis** with caching on spaces with 800+ objects
 - **Single-hop column cascading** (rename/remove) across view -> AM dependencies
-- **Multi-hop chain cascading** (add/rename/remove) via `propagate-columns`, `rename-column-cascade`, `remove-column-cascade`
+- **Multi-hop chain cascading** (add/rename/remove) via `propagate-columns`, `rename-column-cascade`, `remove-column-cascade` — with automatic deploy
 - **Adding columns to graphical views** idempotently (single view) or whole chains (`propagate-columns`)
 - **Adding columns to local tables** (`add-columns-to-table`)
 - **Dependency detection** for graphical views (simple refs, JOINs, associations)

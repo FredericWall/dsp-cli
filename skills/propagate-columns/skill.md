@@ -33,3 +33,5 @@ node --env-file=.env skills/propagate-columns/propagate-columns.js \
 - Backups land in `.cache/backups/<timestamp>-add/`
 - Tables in the graph are leaf nodes only — `--start` may be a table; the skill cascades to its dependent views.
 - The start node itself is skipped during the cascade — seed it first with `add-columns-to-table` or `add-columns-to-view`.
+- **If the table column was already added manually**, skip `add-columns-to-table` and run `propagate-columns` directly — it will skip the start node and cascade only to the dependent views.
+- Deploy is handled automatically after a successful verify phase (re-saves each object without `--no-deploy`). Use `--no-deploy` to skip deploy explicitly.

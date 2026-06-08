@@ -95,6 +95,33 @@ Graphical views have three locations that must all be updated consistently:
 
 **Idempotency**: Each node (src, prj, out) must be checked independently before adding. Checking only the output node and skipping source/projection is wrong — those nodes may already contain stale entries from a prior failed attempt.
 
+## Adding Columns + Cascading to Dependent Views
+
+This is a common operational task. Do not treat it as a feature design exercise — execute directly.
+
+**Check object type first**: `add-columns-to-table` only works on local tables. `add-columns-to-view` only works on graphical views. To disambiguate: a local table has `"kind":"entity"` and no `editorSettings.uiModel`; a graphical view has `editorSettings.uiModel`.
+
+### Full workflow (column not yet on table):
+```bash
+# 1. Add to the table
+node --env-file=.env skills/add-columns-to-table/add-columns-to-table.js \
+  --name MY_TABLE --columns "COL:cds.String:100:Label"
+
+# 2. Cascade to all downstream views (saves + deploys)
+node --env-file=.env skills/propagate-columns/propagate-columns.js \
+  --start MY_TABLE --columns "COL:cds.String:100:Label" --cache
+```
+
+### If the column was already added to the table manually:
+Skip step 1. Run only `propagate-columns` — it skips the start node automatically.
+```bash
+node --env-file=.env skills/propagate-columns/propagate-columns.js \
+  --start MY_TABLE --columns "COL:cds.String:100:Label" --cache
+```
+
+### Deploy behavior:
+`propagate-columns`, `rename-column-cascade`, and `remove-column-cascade` **automatically deploy** after a successful verify phase. No manual DSP UI deployment needed. Use `--no-deploy` to skip.
+
 ## Updating Objects With Dependencies
 
 DSP enforces referential integrity on saves. When renaming or removing columns that downstream objects reference, you will hit HTTP 422 errors in both directions:

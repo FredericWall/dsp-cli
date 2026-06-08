@@ -196,9 +196,9 @@ When renaming or removing columns, DSP enforces referential integrity in both di
 
 The `--allow-missing-dependencies` flag breaks this deadlock. The rename-column and remove-column skills use it automatically. If you write ad-hoc update scripts, always include it.
 
-### Important: Objects are saved with --no-deploy
+### Important: Objects are saved and deployed automatically
 
-The rename-column and remove-column skills save changes with `--no-deploy`. After updating all objects in the chain, deploy them from the SAP Datasphere UI when ready.
+The cascade skills (`propagate-columns`, `rename-column-cascade`, `remove-column-cascade`) save each object and then automatically deploy it by re-saving without `--no-deploy`. No manual DSP UI deployment is needed after a successful cascade run. Use `--no-deploy` explicitly to skip deployment.
 
 ---
 
@@ -235,7 +235,7 @@ node --env-file=.env skills/propagate-columns/propagate-columns.js \
   --cache
 ```
 
-The cascade skill builds the dependency graph (or reuses cached one), backs up every affected object, calls `add-columns-to-view` per node in topo order, verifies each, then deploys.
+The cascade skill builds the dependency graph (or reuses cached one), backs up every affected object, calls `add-columns-to-view` per node in topo order, verifies each, then **deploys automatically**.
 
 ### Rename a column across a chain
 

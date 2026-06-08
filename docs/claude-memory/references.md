@@ -62,3 +62,4 @@ Describes programmatic passcode retrieval using a headless browser for fully una
 SAP Community Q&A for Datasphere topics. Use the tag **`datasphere-cli`** when asking about CLI-specific issues. Useful for finding solutions to errors that aren't covered in the official docs.
 
 For bugs in the CLI itself, open a support ticket in the [SAP Support Launchpad](https://launchpad.support.sap.com/#incident/create) using component **DS-API-CLI**. When reporting, attach a full trace log (`LOG_LEVEL=6`).
+   
