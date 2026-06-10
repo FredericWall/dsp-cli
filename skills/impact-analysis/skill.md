@@ -2,7 +2,7 @@
 
 Build a full dependency graph of all views and analytic models in a space in a **single scan**, then instantly traverse it to show the complete impact chain of any object. Optionally detects columns missing in downstream objects and produces an action plan.
 
-**Key advantage over `find-dependents`**: one scan (~2-3 min) replaces N sequential full scans for an N-level chain. With `--cache`, subsequent runs skip API calls entirely (< 1 second).
+**Use this skill for all dependency questions** — direct dependents, full recursive chains, upstream sources, and column propagation. With `--cache`, subsequent runs are instant (< 1 second).
 
 ## Usage
 
@@ -81,11 +81,11 @@ Three sections:
 
 ## Performance
 
-| Metric | find-dependents (5-level chain) | impact-analysis |
-|--------|--------------------------------|-----------------|
-| API calls | ~4000 (5 full scans) | ~815 (1 scan) |
-| Time | ~15-20 min | ~2-3 min |
-| With cache | N/A | < 1 sec |
+| Metric | Value |
+|--------|-------|
+| API calls | ~815 (1 scan for entire space) |
+| Time | ~2-3 min (first run) |
+| With cache | < 1 sec |
 
 ## Notes
 

@@ -136,8 +136,11 @@ export function extractFromRefs(from) {
   function walk(node) {
     if (!node || typeof node !== "object") return;
     // Simple ref: {ref: ["TableName"]} or {ref: ["TableName"], as: "alias"}
+    // Parameterized ref: {ref: [{id: "TableName", args: {...}}]} (table-function call)
     if (node.ref && Array.isArray(node.ref)) {
-      refs.add(node.ref[0]);
+      const head = node.ref[0];
+      const name = typeof head === "string" ? head : head?.id;
+      if (name) refs.add(name);
     }
     // Join: {join: "left", args: [...], on: [...]}
     if (node.args && Array.isArray(node.args)) {
@@ -153,6 +156,49 @@ export function extractFromRefs(from) {
   return [...refs];
 }
 
+/**
+ * Collect every CSN `from` clause from a view/AM `query`, including those
+ * nested inside SET operators (UNION / INTERSECT / EXCEPT).
+ * Shapes handled:
+ *   - { SELECT: { from: ... } }
+ *   - { SET: { op: "union", args: [{ SELECT: { from: ... } }, ...] } }
+ *   - Nested SETs of SETs
+ * Returns an array of `from` clause objects (may be empty).
+ */
+export function collectQueryFromClauses(query) {
+  const out = [];
+  function walk(q) {
+    if (!q || typeof q !== "object") return;
+    if (q.SELECT?.from) {
+      const f = q.SELECT.from;
+      // A `from` may itself be a SET (UNION of sub-selects). Recurse into it
+      // so we collect the inner SELECTs' from clauses, not the SET wrapper.
+      if (f.SET?.args && Array.isArray(f.SET.args)) {
+        for (const arg of f.SET.args) walk(arg);
+      } else {
+        out.push(f);
+      }
+    }
+    if (q.SET?.args && Array.isArray(q.SET.args)) {
+      for (const arg of q.SET.args) walk(arg);
+    }
+  }
+  walk(query);
+  return out;
+}
+
+/**
+ * Extract all source object names from a CSN `query` (SELECT or SET).
+ * Returns deduplicated array.
+ */
+export function extractQuerySources(query) {
+  const refs = new Set();
+  for (const from of collectQueryFromClauses(query)) {
+    for (const r of extractFromRefs(from)) refs.add(r);
+  }
+  return [...refs];
+}
+
 // ─── Graph Construction ───────────────────────────────────────────────────────
 
 export function parseViewNode(name, data) {
@@ -161,9 +207,16 @@ export function parseViewNode(name, data) {
   const def = defs[key];
   if (!def) return null;
 
-  const fromClause = def?.query?.SELECT?.from;
-  const source = fromClause?.ref?.[0] || null;
-  const joinSources = source ? [] : extractFromRefs(fromClause);
+  const query = def?.query;
+  const fromClauses = collectQueryFromClauses(query);
+  // Treat the view as having a single "primary" source only when there is
+  // exactly one SELECT (no SET), exactly one from clause, and that clause is
+  // a bare ref (no join). All other cases go through joinSources.
+  const onlyFrom = fromClauses.length === 1 ? fromClauses[0] : null;
+  const source = onlyFrom && onlyFrom.ref?.[0] && !onlyFrom.args && !onlyFrom.SELECT
+    ? onlyFrom.ref[0]
+    : null;
+  const joinSources = source ? [] : extractQuerySources(query);
   const elements = def?.elements || {};
   const columns = {};
   const associationTargets = [];
@@ -183,9 +236,14 @@ export function parseViewNode(name, data) {
     }
   }
 
-  // For SQL/table-function views, extract dependencies from the script
+  // For SQL/table-function views, extract dependencies from the script.
+  // DSP stores SQL in different fields depending on view type:
+  //   @DataWarehouse.tableFunction.script  — table function views
+  //   @DataWarehouse.sqlDefinition.script  — some SQL definition views
+  //   @DataWarehouse.sqlEditor.query       — standard SQL views (sqlEditor mode)
   const sqlScript = def["@DataWarehouse.tableFunction.script"]
-    || def["@DataWarehouse.sqlDefinition.script"];
+    || def["@DataWarehouse.sqlDefinition.script"]
+    || def["@DataWarehouse.sqlEditor.query"];
   const sqlSources = extractSqlDependencies(sqlScript);
 
   return {
@@ -208,9 +266,16 @@ export function parseAMNode(name, data) {
   const def = defs[key];
   if (!def) return null;
 
-  const fromRef = def?.query?.SELECT?.from;
-  const source = fromRef?.ref?.[0] ?? (typeof fromRef === "string" ? fromRef : null);
-  const joinSources = source ? [] : extractFromRefs(fromRef);
+  const query = def?.query;
+  const fromClauses = collectQueryFromClauses(query);
+  const onlyFrom = fromClauses.length === 1 ? fromClauses[0] : null;
+  let source = null;
+  if (onlyFrom && !onlyFrom.args && !onlyFrom.SELECT) {
+    source = onlyFrom.ref?.[0] ?? (typeof onlyFrom === "string" ? onlyFrom : null);
+  } else if (typeof query?.SELECT?.from === "string") {
+    source = query.SELECT.from;
+  }
+  const joinSources = source ? [] : extractQuerySources(query);
 
   const elements = def?.elements || {};
   const columns = {};

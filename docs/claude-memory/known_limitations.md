@@ -32,7 +32,7 @@ OAuth tokens expire after 1 hour (default). Long-running operations like `impact
 ## Dependency Detection
 
 ### SQL views: limited pattern matching
-For SQL views and table function views, `find-dependents` and `impact-analysis` extract dependencies by matching `FROM "TableName"` and `JOIN "TableName"` patterns in the SQL script. This means:
+For SQL views and table function views, `impact-analysis` extracts dependencies by matching `FROM "TableName"` and `JOIN "TableName"` patterns in the SQL script. This means:
 
 **Detected:**
 - `FROM "MY_TABLE"`

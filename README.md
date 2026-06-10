@@ -375,22 +375,6 @@ Traverses the full dependency chain of an analytic model or view and prints a su
 
 ---
 
-#### find-dependents
-
-Finds all views and analytic models that reference a given table or view.
-
-**Syntax:**
-```bash
-/find-dependents --name TABLE_OR_VIEW [--space SPACE_ID]
-```
-
-**Example:**
-```bash
-/find-dependents --name SALES_FACT_001
-```
-
----
-
 #### impact-analysis
 
 Builds a full dependency graph in a single scan and traverses it to show the complete impact chain. Optionally detects missing columns in downstream objects.
@@ -451,7 +435,6 @@ dsp-cli/
 │   ├── list-objects/              # List all objects of a type in a space
 │   ├── read-object/               # Read and pretty-print any object definition
 │   ├── describe-model/            # Traverse full model chain (AM -> view -> fact -> dims)
-│   ├── find-dependents/           # Find all views/AMs referencing a table or view
 │   ├── impact-analysis/           # Full recursive dependency graph + column gap analysis
 │   └── export-model/              # Export full model chain to local JSON files
 ├── .env.example

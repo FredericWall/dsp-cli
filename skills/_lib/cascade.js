@@ -95,11 +95,19 @@ export function buildPlan(graph, startName) {
  * The DSP CLI has no separate "deploy" sub-command — deploy is triggered by omitting
  * --no-deploy on the update call.
  *
+ * IMPORTANT: Callers should generally NOT pass `snapshotData`. If a backup snapshot
+ * captured before the save phase is passed in, this function will deploy that
+ * (pre-modification) CSN and undo the changes. The default behavior — re-reading
+ * fresh CSN — deploys whatever was just saved, which is what cascades want.
+ * `snapshotData` is retained only for callers that intentionally want to deploy
+ * a specific known CSN.
+ *
  * @param {string} token  Bearer token
  * @param {string} space  Space ID
  * @param {"view"|"analyticModel"} type  Object type
  * @param {string} name   Technical name
  * @param {object} commands  CLI commands object
+ * @param {object} [snapshotData]  Optional: deploy this CSN instead of re-reading
  * @returns {{ ok: boolean, error?: string }}
  */
 export async function deployObject(token, space, type, name, commands, snapshotData) {
@@ -136,8 +144,9 @@ export async function deployObject(token, space, type, name, commands, snapshotD
  *                 Returns ok=true on save success; false on failure.
  *   verifyNode:   async (item, commands, token) => { ok, detail }
  *                 Called per save-success node to confirm the change.
- *   deployNode:   async (item, commands, token, snapshotData?) => { ok, error? }
- *                 Called per verified node when noDeploy=false.
+ *   deployNode:   async (item, commands, token) => { ok, error? }
+ *                 Called per verified node when noDeploy=false. Should re-read
+ *                 fresh CSN and deploy that — must NOT use a pre-save snapshot.
  *   dryRun, noDeploy, force, cache, refresh, maxNodes
  */
 export async function runCascade(opts) {
@@ -244,20 +253,28 @@ export async function runCascade(opts) {
     }
   }));
 
-  // Deploy phase — independent per object, run in parallel
+  // Deploy phase — must run serially: the @sap/datasphere-cli `commands` object
+  // is not safe for concurrent invocations of the same command (parameters like
+  // --technical-name and --file-path are stored on shared state, so parallel
+  // deploys clobber each other and DSP rejects with "unexpected name").
+  //
+  // CRITICAL: We deliberately DO NOT pass the pre-save backup snapshot to the
+  // deploy step. The snapshot was captured before saves modified the CSN, so
+  // re-saving it would undo every column add/rename/remove we just persisted.
+  // deployNode must re-read the *current* (post-save) CSN and deploy that.
   const allVerified = summary.every(r => r.save !== "✓" || r.verify === "✓");
   if (!noDeploy && allVerified) {
     console.log("\n  Deploy phase:");
-    await Promise.all(summary.map(async (row) => {
-      if (row.verify !== "✓") return;
+    for (const row of summary) {
+      if (row.verify !== "✓") continue;
       const item = plan.find(p => p.name === row.name);
       try {
-        const d = await deployNode(item, commands, token, snapshots.get(item.name));
+        const d = await deployNode(item, commands, token);
         row.deploy = d.ok ? "✓" : `✗ ${d.error || ""}`;
       } catch (err) {
         row.deploy = `✗ ${err.response?.data?.message || err.message}`;
       }
-    }));
+    }
   } else if (!allVerified) {
     console.log("\n  Skipping deploy phase (verification failures present).");
   } else {

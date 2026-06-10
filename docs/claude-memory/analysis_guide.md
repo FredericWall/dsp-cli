@@ -57,22 +57,7 @@ node --env-file=.env skills/describe-model/describe-model.js \
 
 ## Step 3: Trace Dependencies
 
-Two skills find objects that *reference* a given table or view. Choose based on your use case.
-
-### find-dependents: Who uses this object?
-
-Scans all views and analytic models in the space to find those referencing a specific table or view.
-
-```bash
-node --env-file=.env skills/find-dependents/find-dependents.js \
-  --name MY_SOURCE_TABLE
-```
-
-**Output**: Every view and AM that uses the target as a direct source, association target, JOIN source, or SQL script reference.
-
-**Best for**: Quick answer to "what breaks if I change this table?"
-
-**Performance**: Scans every object individually. Fine for one-off checks. For repeated queries or multi-level chains, use `impact-analysis` instead.
+Use `impact-analysis` to find all objects that reference a given table or view.
 
 ### impact-analysis: Full dependency graph
 
@@ -97,17 +82,7 @@ node --env-file=.env skills/impact-analysis/impact-analysis.js \
 - `upstream` — what sources feed into this object
 - `both` — full picture in both directions
 
-**Best for**: Large spaces, multi-level dependency chains, repeated queries, column propagation analysis.
-
-### When to use which
-
-| Scenario | Use |
-|----------|-----|
-| "What views use TABLE_X?" (one-off) | `find-dependents` |
-| "What's the full chain if I change TABLE_X?" | `impact-analysis --direction downstream` |
-| "Where does VIEW_Y get its data from?" | `impact-analysis --direction upstream` |
-| "I need to check multiple tables" | `impact-analysis --cache` (one scan, many queries) |
-| "Which columns are missing downstream?" | `impact-analysis --columns COL1,COL2` |
+**Best for**: All dependency queries — one-off checks, multi-level chains, repeated queries, column propagation analysis.
 
 ---
 

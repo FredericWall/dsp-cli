@@ -35,7 +35,7 @@ Contains:
 
 Contains:
 - How to explore a space (list-objects, read-object)
-- Tracing dependencies (find-dependents vs impact-analysis)
+- Tracing dependencies (impact-analysis)
 - Column change impact assessment with propagation analysis
 - Modifying views (add columns, rename, remove) with cascading
 - Worked example with a real SAP consolidation hierarchy

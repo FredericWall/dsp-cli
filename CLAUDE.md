@@ -20,7 +20,6 @@ skills/
   list-objects/             # List all objects of a type in a space
   read-object/              # Read and pretty-print any object's definition
   describe-model/           # Traverse full model chain (AM → view → fact → dims)
-  find-dependents/          # Find all views/AMs that reference a given table or view
   impact-analysis/          # Full recursive dependency graph + column gap analysis (single scan, cached)
 
   # ── Modify objects ──────────────────────────────────────────
@@ -76,7 +75,7 @@ Always follow this sequence when building a complete data model:
 - For graphical views: generate `DimensionNode`, `Association`, `ElementMapping` — but do **NOT** generate `EntitySymbol` or `AssociationSymbol` (Datasphere auto-generates these; partial symbols cause display issues)
 - `--dimensions` parameter uses semicolons to separate multiple associations: `"FK:DIM_TABLE:JOIN_KEY;FK2:DIM2:KEY2"`
 - Analytic model auto-detects dimensions when the source view already has associations defined
-- **SQL/table-function views** store their dependencies as raw SQL in `@DataWarehouse.tableFunction.script`, not in `query.SELECT.from`. Both `find-dependents` and `impact-analysis` parse `FROM "X"` / `JOIN "X"` patterns in these scripts to detect dependencies that CSN metadata alone would miss.
+- **SQL/table-function views** store their dependencies as raw SQL — the field varies by view type: `@DataWarehouse.tableFunction.script` (table functions), `@DataWarehouse.sqlDefinition.script` (some SQL definition views), or `@DataWarehouse.sqlEditor.query` (standard SQL views). `impact-analysis` checks all three fields and parses `FROM "X"` / `JOIN "X"` patterns to detect dependencies that CSN metadata alone would miss.
 - **Graphical views with JOINs** have a nested `from` clause (`{join: "left", args: [...]}` with sub-SELECTs) instead of a simple `{ref: [...]}`. Both skills recursively walk the `from` tree to extract all source refs.
 
 ## Modifying Existing Graphical Views
@@ -155,6 +154,17 @@ Standard script template pattern:
 - Always log `err.response?.data` on failure to see the DSP error message
 - Always use `"--no-deploy": true` unless deployment is explicitly requested
 - Always use `"--allow-missing-dependencies": true` on every update call
+
+## Analyzing Dependencies
+
+When asked "what depends on X", "list dependent objects", "impact of X", or any question about dependency chains, **always use `impact-analysis`**.
+
+```bash
+node --env-file=.env skills/impact-analysis/impact-analysis.js \
+  --name <object-name> --direction downstream [--cache]
+```
+
+Use `--cache` for repeated queries — subsequent runs are instant.
 
 ## Workflow Reference
 
